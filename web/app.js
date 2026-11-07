@@ -23,17 +23,26 @@
       cards: [],
       wrongs: [],
       tasks: [],
+      exams: [],
+      essays: [],
       stats: { days: {}, streak: 0, last: "" }
     };
   }
 
   function seed(state) {
     const now = Date.now();
+    const perDay = 20;                        // 每天最多引入的新卡
+    const deckSeen = {};
     (window.SEED.cards || []).forEach((c, i) => {
+      const o = Array.isArray(c)
+        ? { deck: c[0], tag: c[1], front: c[2], back: c[3] } : c;
+      const k = o.deck || "语文";
+      const n = deckSeen[k] = (deckSeen[k] || 0) + 1;
       state.cards.push({
-        id: "c" + now + "_" + i, deck: c.deck, tag: c.tag || "",
-        front: c.front, back: c.back, due: now, interval: 0,
-        ease: 2.5, reps: 0, lapses: 0
+        id: "c" + now + "_" + i, deck: k, tag: o.tag || "",
+        front: o.front, back: o.back,
+        due: now + Math.floor((n - 1) / perDay) * DAY,
+        interval: 0, ease: 2.5, reps: 0, lapses: 0
       });
     });
     (window.SEED.wrongs || []).forEach((w, i) => {
@@ -161,6 +170,8 @@
     $("#home-reviewed").textContent = doneToday;
     const wk = S.tasks.filter((t) => t.week === 0);
     $("#home-task").textContent = wk.filter((t) => t.done).length + "/" + wk.length;
+    const exs = examStats();
+    $("#home-exam").textContent = exs.avg != null ? exs.avg : "—";
 
     // 今天做什么
     const todo = [];
@@ -193,12 +204,15 @@
 
   /* ---------------- 背诵 ---------------- */
   let curDeck = "全部";
+  let curTag = "全部";
   let queue = [];
   let current = null;
 
   function buildQueue() {
     const now = Date.now();
-    queue = S.cards.filter((c) => c.due <= now && (curDeck === "全部" || c.deck === curDeck))
+    queue = S.cards.filter((c) => c.due <= now &&
+      (curDeck === "全部" || c.deck === curDeck) &&
+      (curTag === "全部" || c.tag === curTag))
       .sort((a, b) => a.due - b.due);
   }
 
@@ -208,7 +222,18 @@
     $("#deck-chips").innerHTML = ["全部", "语文", "政治"].map((d) =>
       '<button class="chip' + (d === curDeck ? " on" : "") + '" data-deck="' + d + '">' + d +
       (d === "全部" ? " " + ds["全部"] : " " + (ds[d] || 0)) + "</button>").join("");
-    $$("#deck-chips .chip").forEach((b) => b.onclick = () => { curDeck = b.dataset.deck; buildQueue(); renderCards(); });
+    $$("#deck-chips .chip").forEach((b) => b.onclick = () => {
+      curDeck = b.dataset.deck; curTag = "全部"; renderCards();
+    });
+
+    const tags = [];
+    S.cards.forEach((c) => {
+      if (curDeck !== "全部" && c.deck !== curDeck) return;
+      if (c.tag && tags.indexOf(c.tag) < 0) tags.push(c.tag);
+    });
+    $("#tag-chips").innerHTML = ["全部"].concat(tags).map((t) =>
+      '<button class="chip' + (t === curTag ? " on" : "") + '" data-tag="' + esc(t) + '">' + esc(t) + "</button>").join("");
+    $$("#tag-chips .chip").forEach((b) => b.onclick = () => { curTag = b.dataset.tag; renderCards(); });
 
     buildQueue();
     if (!queue.length) {
@@ -365,6 +390,140 @@
     };
   };
 
+  /* ---------------- 模拟考计时 ---------------- */
+  let examTimer = null;
+
+  function examStats() {
+    const list = S.exams || [];
+    const avg = list.length ? Math.round(list.reduce((a, b) => a + (+b.score || 0), 0) / list.length) : null;
+    return { list, avg };
+  }
+
+  function openExamSheet() {
+    const { list, avg } = examStats();
+    const recent = list.slice(-5).reverse().map((e) =>
+      '<div class="li"><span class="dot">·</span><span class="txt">' +
+      esc(e.date + " " + e.subject + "  " + e.score + "/" + (e.total || 150) +
+        "（用时 " + e.used + " 分）") + "</span></div>").join("");
+    sheet("模拟考", '<div class="form">' +
+      '<p class="tip">整卷限时：语文 120 分钟、政治 120 分钟（与真实考试一致）。' +
+      (avg != null ? " 目前平均 " + avg + " / 150。" : "") + "</p>" +
+      '<button class="primary" data-exam="语文">语文 120 分钟</button>' +
+      '<button class="primary" data-exam="政治">政治 120 分钟</button>' +
+      '<button class="ghost" data-exam="自定义">自定义时长</button>' +
+      (recent ? '<h2 class="sec" style="margin-top:8px">最近记录</h2>' + recent : "") +
+      "</div>");
+    $$("[data-exam]").forEach((b) => b.onclick = () => {
+      if (b.dataset.exam === "自定义") {
+        const m = prompt("多少分钟？", "90");
+        if (!m) return;
+        startExam("自选", Math.max(1, parseInt(m, 10) || 90));
+      } else {
+        startExam(b.dataset.exam, 120);
+      }
+    });
+  }
+
+  function startExam(subject, minutes) {
+    clearInterval(examTimer);
+    const totalSec = minutes * 60;
+    let left = totalSec;
+    const render = () => {
+      const m = Math.floor(left / 60), s = left % 60;
+      $("#exam-clock").textContent = pad(m) + ":" + pad(s);
+      $("#exam-clock").style.color = left <= 300 ? "var(--bad)" : "var(--acc)";
+    };
+    sheet("模拟考 · " + subject, '<div class="form" style="text-align:center">' +
+      '<div id="exam-clock" style="font-size:64px;font-weight:800;letter-spacing:-2px;font-variant-numeric:tabular-nums">' + pad(minutes) + ":00</div>" +
+      '<p class="tip" id="exam-hint">交卷前不要退出；退出后计时会停。</p>' +
+      '<button class="ghost" id="exam-pause">暂停</button>' +
+      '<button class="primary" id="exam-done">交卷并记分</button>' +
+      "</div>");
+    render();
+    examTimer = setInterval(() => {
+      left--;
+      if (left <= 0) {
+        clearInterval(examTimer);
+        left = 0; render();
+        $("#exam-hint").textContent = "时间到。请交卷记分。";
+        return;
+      }
+      render();
+    }, 1000);
+
+    let paused = false;
+    $("#exam-pause").onclick = () => {
+      paused = !paused;
+      if (paused) { clearInterval(examTimer); $("#exam-pause").textContent = "继续"; }
+      else {
+        $("#exam-pause").textContent = "暂停";
+        examTimer = setInterval(() => {
+          left--; if (left <= 0) { clearInterval(examTimer); left = 0; render(); return; } render();
+        }, 1000);
+      }
+    };
+    $("#exam-done").onclick = () => {
+      clearInterval(examTimer);
+      const used = Math.round((totalSec - left) / 60);
+      const sc = prompt("这次得分（满分 150）", "120");
+      if (sc === null) return;
+      S.exams.push({
+        id: "e" + Date.now(), subject, minutes, used,
+        score: Math.max(0, Math.min(150, parseInt(sc, 10) || 0)),
+        total: 150, date: todayKey()
+      });
+      save(); closeSheet(); renderHome(); toast("已记录");
+    };
+  }
+
+  /* ---------------- AI 批改大题 ---------------- */
+  function openEssaySheet() {
+    const n = (S.essays || []).length;
+    sheet("AI 批改大题", '<div class="form">' +
+      '<p class="tip">把题目和你写的答案粘进来，AI 按采分点给分并指出失分原因。' +
+      (n ? " 已保存 " + n + " 次批改。" : "") + "</p>" +
+      '<label>科目<select id="es-sub"><option>政治</option><option>语文</option></select></label>' +
+      '<label>题目<textarea id="es-q" placeholder="如：结合材料，说明如何推进生态文明建设。"></textarea></label>' +
+      '<label>我的答案<textarea id="es-a" style="min-height:120px"></textarea></label>' +
+      '<label>满分<input id="es-full" type="number" value="10" min="1" max="60"></label>' +
+      '<button class="primary" id="es-go">开始批改</button>' +
+      '<div id="es-out"></div></div>');
+
+    $("#es-go").onclick = async () => {
+      const sub = $("#es-sub").value, q = $("#es-q").value.trim();
+      const a = $("#es-a").value.trim(), full = +$("#es-full").value || 10;
+      if (!q || !a) return toast("题目和答案都要填");
+      if (!S.settings.apiKey) {
+        $("#es-out").innerHTML = '<p class="tip">未配置 API Key，无法批改。到「设置 → AI」填入即可。</p>';
+        return;
+      }
+      $("#es-out").innerHTML = '<p class="tip"><span class="spin"></span> 批改中…</p>';
+      const prompt = "你是新疆专升本《" + sub + "》阅卷老师。题目：" + q +
+        "\n考生答案：" + a + "\n满分：" + full + " 分。\n" +
+        "请输出四部分，用小标题：【得分】x/" + full +
+        " 【采分点】逐条列出应答到的点，标注考生是否答到【失分原因】具体指出【改进示范】给出一份能拿高分的答案（150 字内）。" +
+        "评分要严格，按采分点给分，不要给同情分。";
+      try {
+        const out = await callAI([{ role: "system", content: SYS }, { role: "user", content: prompt }]);
+        const m = out.match(/【得分】\s*([0-9.]+)/);
+        $("#es-out").innerHTML = '<div class="ai-out">' + esc(out) + "</div>" +
+          '<button class="primary wide" id="es-save">存为批改记录</button>';
+        $("#es-save").onclick = () => {
+          S.essays.push({
+            id: "s" + Date.now(), date: todayKey(), subject: sub, question: q,
+            answer: a, score: m ? +m[1] : null, full, feedback: out
+          });
+          save(); closeSheet(); toast("已保存");
+        };
+      } catch (e) {
+        $("#es-out").innerHTML = '<p class="tip">失败：' + esc(e.message) + "</p>";
+      }
+    };
+  }
+
+  $("#tile-exam").onclick = openExamSheet;
+  $("#tile-essay").onclick = openEssaySheet;
+
   /* ---------------- 计划 ---------------- */
   function renderPlan() {
     const wk = S.tasks.filter((t) => t.week === 0);
@@ -408,7 +567,8 @@
     $("#set-api-base").value = st.apiBase;
     $("#set-model").value = st.model;
     $("#set-apikey").value = st.apiKey;
-    $("#app-version").textContent = "版本 1.0 · 卡片 " + S.cards.length + " 张 · 错题 " + S.wrongs.length + " 道";
+    $("#app-version").textContent = "版本 1.1 · 卡片 " + S.cards.length + " 张 · 错题 " +
+      S.wrongs.length + " 道 · 模考 " + (S.exams || []).length + " 次 · 批改 " + (S.essays || []).length + " 份";
   }
 
   ["set-exam", "set-target", "set-score", "set-goal", "set-api-base", "set-model", "set-apikey"].forEach((id) => {
