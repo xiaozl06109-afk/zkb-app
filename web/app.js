@@ -205,6 +205,7 @@
   /* ---------------- 背诵 ---------------- */
   let curDeck = "全部";
   let curTag = "全部";
+  let quizMode = true;                      // true=选择题，false=翻卡自评
   let queue = [];
   let current = null;
 
@@ -248,9 +249,72 @@
     $("#flash-front").textContent = current.front;
     $("#flash-back").textContent = current.back;
     $("#flash-back").hidden = true;
-    $("#btn-reveal").hidden = false;
-    $("#srs-btns").hidden = true;
+    $("#btn-next").hidden = true;
+    $("#btn-mode").textContent = quizMode ? "切换为卡片模式（翻面自评）" : "切换为选择题模式";
+
+    if (quizMode) {
+      $("#btn-reveal").hidden = true;
+      $("#srs-btns").hidden = true;
+      renderOptions(current);
+    } else {
+      $("#quiz-opts").hidden = true;
+      $("#quiz-opts").innerHTML = "";
+      $("#btn-reveal").hidden = false;
+      $("#srs-btns").hidden = true;
+    }
   }
+
+  /* 用同章节其他卡片的答案做干扰项，无需 AI 也有 ABCD */
+  function buildOptions(card) {
+    const pool = S.cards.filter((c) =>
+      c.id !== card.id && c.back && c.back !== card.back &&
+      (c.tag === card.tag || c.deck === card.deck));
+    const sameTag = pool.filter((c) => c.tag === card.tag);
+    const src = (sameTag.length >= 3 ? sameTag : pool).slice();
+    for (let i = src.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = src[i]; src[i] = src[j]; src[j] = t;
+    }
+    const picked = [];
+    src.forEach((c) => { if (picked.length < 3 && picked.indexOf(c.back) < 0) picked.push(c.back); });
+    const opts = picked.concat([card.back]);
+    for (let i = opts.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = opts[i]; opts[i] = opts[j]; opts[j] = t;
+    }
+    return opts;
+  }
+
+  function renderOptions(card) {
+    const opts = buildOptions(card);
+    const letters = ["A", "B", "C", "D"];
+    const box = $("#quiz-opts");
+    box.innerHTML = opts.map((o, i) =>
+      '<button class="opt" data-opt="' + i + '"><b>' + letters[i] + "</b>" + esc(o) + "</button>").join("");
+    box.hidden = false;
+
+    box.onclick = (e) => {
+      const b = e.target.closest("button[data-opt]");
+      if (!b || b.disabled) return;
+      const idx = +b.dataset.opt;
+      const ok = opts[idx] === card.back;
+      $$("#quiz-opts .opt").forEach((el, i) => {
+        el.disabled = true;
+        if (opts[i] === card.back) el.classList.add("right");
+        else if (i === idx) el.classList.add("wrong");
+      });
+      if (!ok) { $("#flash-back").hidden = false; }
+      gradeCard(card, ok ? 2 : 0);
+      const tk = todayKey();
+      $("#cards-sub").textContent = "待复习 " + deckStats()["全部"] + " 张 · 今日已完成 " + (S.stats.days[tk] || 0) + " 张";
+      $("#btn-next").hidden = false;
+      toast(ok ? "答对了 ✓" : "答错了，正确答案已标出");
+    };
+  }
+
+  $("#btn-next").onclick = () => { buildQueue(); renderCards(); };
+
+  $("#btn-mode").onclick = () => { quizMode = !quizMode; renderCards(); };
 
   $("#btn-reveal").onclick = () => {
     if (!current) return;
@@ -259,11 +323,7 @@
     $("#srs-btns").hidden = false;
   };
 
-  $("#srs-btns").onclick = (e) => {
-    const btn = e.target.closest("button[data-q]");
-    if (!btn || !current) return;
-    const q = +btn.dataset.q;
-    const c = current;
+  function gradeCard(c, q) {
     let interval;
     if (q === 0) { c.lapses++; c.ease = Math.max(1.3, c.ease - 0.2); interval = 0.007; }
     else if (q === 1) { c.ease = Math.max(1.3, c.ease - 0.05); interval = c.reps ? Math.max(1, c.interval * 1.2) : 1; }
@@ -272,14 +332,20 @@
     c.interval = Math.round(interval * 100) / 100;
     c.due = Date.now() + interval * DAY;
     c.reps++;
-
     const tk = todayKey();
     S.stats.days[tk] = (S.stats.days[tk] || 0) + 1;
     S.stats.last = tk;
     save();
+  }
 
+  $("#srs-btns").onclick = (e) => {
+    const btn = e.target.closest("button[data-q]");
+    if (!btn || !current) return;
+    const tk0 = current;
+    gradeCard(tk0, +btn.dataset.q);
+    buildQueue();
     renderCards();
-    $("#cards-sub").textContent = "待复习 " + deckStats()["全部"] + " 张 · 今日已完成 " + S.stats.days[tk] + " 张";
+    $("#cards-sub").textContent = "待复习 " + deckStats()["全部"] + " 张 · 今日已完成 " + (S.stats.days[todayKey()] || 0) + " 张";
   };
 
   $("#btn-add-card").onclick = () => {
@@ -415,9 +481,12 @@
       "</div>");
     $$("[data-exam]").forEach((b) => b.onclick = () => {
       if (b.dataset.exam === "自定义") {
-        const m = prompt("多少分钟？", "90");
-        if (!m) return;
-        startExam("自选", Math.max(1, parseInt(m, 10) || 90));
+        sheet("自定义时长", '<div class="form"><label>分钟数<input id="exam-min" type="number" value="90" min="5" max="300"></label>' +
+          '<button class="primary" id="exam-min-go">开始</button></div>');
+        $("#exam-min-go").onclick = () => {
+          const m = Math.max(5, Math.min(300, parseInt($("#exam-min").value, 10) || 90));
+          startExam("自选", m);
+        };
       } else {
         startExam(b.dataset.exam, 120);
       }
@@ -464,15 +533,32 @@
     };
     $("#exam-done").onclick = () => {
       clearInterval(examTimer);
-      const used = Math.round((totalSec - left) / 60);
-      const sc = prompt("这次得分（满分 150）", "120");
-      if (sc === null) return;
-      S.exams.push({
-        id: "e" + Date.now(), subject, minutes, used,
-        score: Math.max(0, Math.min(150, parseInt(sc, 10) || 0)),
-        total: 150, date: todayKey()
-      });
-      save(); closeSheet(); renderHome(); toast("已记录");
+      $("#exam-done").hidden = true;
+      $("#exam-pause").hidden = true;
+      const box = document.createElement("div");
+      box.className = "form";
+      box.style.marginTop = "12px";
+      box.innerHTML = '<label>这次得分（满分 150）<input id="exam-score" type="number" value="120" min="0" max="150"></label>' +
+        '<button class="primary" id="exam-save">保存记录</button>' +
+        '<button class="ghost" id="exam-back">继续考试</button>';
+      $("#exam-clock").parentNode.appendChild(box);
+      $("#exam-save").onclick = () => {
+        const sc = Math.max(0, Math.min(150, parseInt($("#exam-score").value, 10) || 0));
+        S.exams.push({
+          id: "e" + Date.now(), subject, minutes,
+          used: Math.round((totalSec - left) / 60),
+          score: sc, total: 150, date: todayKey()
+        });
+        save(); closeSheet(); renderHome(); toast("已记录");
+      };
+      $("#exam-back").onclick = () => {
+        box.remove();
+        $("#exam-done").hidden = false;
+        $("#exam-pause").hidden = false;
+        examTimer = setInterval(() => {
+          left--; if (left <= 0) { clearInterval(examTimer); left = 0; render(); return; } render();
+        }, 1000);
+      };
     };
   }
 
@@ -567,7 +653,7 @@
     $("#set-api-base").value = st.apiBase;
     $("#set-model").value = st.model;
     $("#set-apikey").value = st.apiKey;
-    $("#app-version").textContent = "版本 1.1 · 卡片 " + S.cards.length + " 张 · 错题 " +
+    $("#app-version").textContent = "版本 1.2 · 卡片 " + S.cards.length + " 张 · 错题 " +
       S.wrongs.length + " 道 · 模考 " + (S.exams || []).length + " 次 · 批改 " + (S.essays || []).length + " 份";
   }
 

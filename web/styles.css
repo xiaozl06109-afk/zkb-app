@@ -74,6 +74,13 @@ h2.sec + .card{margin-top:0}
 .q-again{background:var(--bad)} .q-hard{background:var(--warn)}
 .q-good{background:var(--acc)} .q-easy{background:var(--acc2)}
 
+.quiz-opts{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+.opt{text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:12px;
+  background:var(--bg2);color:var(--txt);font:inherit;font-size:14px;line-height:1.5}
+.opt b{color:var(--dim);margin-right:8px;font-weight:600}
+.opt.right{border-color:var(--acc2);background:rgba(34,197,94,.14)}
+.opt.wrong{border-color:var(--bad);background:rgba(239,68,68,.14)}
+.opt:disabled{opacity:.9}
 .row-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
 .ghost{background:transparent;border:1px solid var(--line);color:var(--txt);
   padding:10px 14px;border-radius:12px;font:inherit;font-size:13.5px}

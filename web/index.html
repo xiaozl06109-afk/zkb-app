@@ -70,6 +70,7 @@
 
     <div class="card flash" id="flash-card">
       <div class="flash-face" id="flash-front">—</div>
+      <div class="quiz-opts" id="quiz-opts" hidden></div>
       <div class="flash-answer" id="flash-back" hidden></div>
       <button class="reveal" id="btn-reveal">显示答案</button>
       <div class="srs" id="srs-btns" hidden>
@@ -78,12 +79,14 @@
         <button data-q="2" class="q-good">记得<small>3 天</small></button>
         <button data-q="3" class="q-easy">简单<small>7 天</small></button>
       </div>
+      <button class="primary wide" id="btn-next" hidden style="margin-top:14px">下一题</button>
     </div>
 
     <div class="row-btns">
       <button class="ghost" id="btn-add-card">＋ 新建卡片</button>
       <button class="ghost" id="btn-card-list">卡片列表</button>
     </div>
+    <button class="ghost wide" id="btn-mode" style="margin-top:10px">切换为卡片模式</button>
     <p class="tip" id="cards-empty" hidden>这个卡组今天没有待复习的卡片了。可以切换卡组，或让 AI 帮你造新卡。</p>
   </section>
 
