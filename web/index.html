@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no">
+<title>升本 · 语文政治</title>
+<link rel="stylesheet" href="styles.css">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="升本">
+<link rel="manifest" href="manifest.webmanifest">
+</head>
+<body>
+<div id="app">
+
+  <!-- ========== 首页 ========== -->
+  <section class="page" id="page-home">
+    <header class="hd">
+      <div>
+        <h1>距专升本考试</h1>
+        <p class="sub" id="home-exam-date">—</p>
+      </div>
+      <div class="streak"><span id="streak-num">0</span><small>天连续</small></div>
+    </header>
+
+    <div class="countdown card">
+      <div class="cd-num"><span id="cd-days">—</span><em>天</em></div>
+      <div class="cd-sub" id="cd-sub">—</div>
+      <div class="cd-bar"><i id="cd-progress" style="width:0%"></i></div>
+      <p class="cd-note" id="cd-note"></p>
+    </div>
+
+    <div class="grid2">
+      <button class="tile" data-go="cards">
+        <b id="home-due">0</b><span>今日待背</span>
+      </button>
+      <button class="tile" data-go="wrongs">
+        <b id="home-wrong">0</b><span>未掌握错题</span>
+      </button>
+      <button class="tile" data-go="cards" id="btn-today-review">
+        <b id="home-reviewed">0</b><span>今日已复习</span>
+      </button>
+      <button class="tile" data-go="plan">
+        <b id="home-task">0/0</b><span>本周任务</span>
+      </button>
+    </div>
+
+    <h2 class="sec">今天做什么</h2>
+    <div class="card list" id="home-todo"></div>
+
+    <h2 class="sec">倒计时里程碑</h2>
+    <div class="card" id="milestones"></div>
+  </section>
+
+  <!-- ========== 背诵 ========== -->
+  <section class="page" id="page-cards">
+    <header class="hd">
+      <div><h1>背诵</h1><p class="sub" id="cards-sub">—</p></div>
+      <button class="ghost" id="btn-ai-cards">AI 造卡</button>
+    </header>
+
+    <div class="chips" id="deck-chips"></div>
+
+    <div class="card flash" id="flash-card">
+      <div class="flash-face" id="flash-front">—</div>
+      <div class="flash-answer" id="flash-back" hidden></div>
+      <button class="reveal" id="btn-reveal">显示答案</button>
+      <div class="srs" id="srs-btns" hidden>
+        <button data-q="0" class="q-again">忘记<small>10 分钟</small></button>
+        <button data-q="1" class="q-hard">模糊<small>1 天</small></button>
+        <button data-q="2" class="q-good">记得<small>3 天</small></button>
+        <button data-q="3" class="q-easy">简单<small>7 天</small></button>
+      </div>
+    </div>
+
+    <div class="row-btns">
+      <button class="ghost" id="btn-add-card">＋ 新建卡片</button>
+      <button class="ghost" id="btn-card-list">卡片列表</button>
+    </div>
+    <p class="tip" id="cards-empty" hidden>这个卡组今天没有待复习的卡片了。可以切换卡组，或让 AI 帮你造新卡。</p>
+  </section>
+
+  <!-- ========== 错题 ========== -->
+  <section class="page" id="page-wrongs">
+    <header class="hd">
+      <div><h1>错题本</h1><p class="sub" id="wrongs-sub">—</p></div>
+      <button class="ghost" id="btn-add-wrong">＋ 录题</button>
+    </header>
+    <div class="chips" id="wrong-chips"></div>
+    <div id="wrong-list"></div>
+  </section>
+
+  <!-- ========== 计划 ========== -->
+  <section class="page" id="page-plan">
+    <header class="hd">
+      <div><h1>计划</h1><p class="sub" id="plan-sub">—</p></div>
+      <button class="ghost" id="btn-ai-plan">AI 排计划</button>
+    </header>
+    <div class="card" id="plan-box"></div>
+    <button class="primary wide" id="btn-add-task">＋ 添加任务</button>
+  </section>
+
+  <!-- ========== 设置 ========== -->
+  <section class="page" id="page-settings">
+    <header class="hd"><div><h1>设置</h1><p class="sub">数据只存在本机</p></div></header>
+
+    <h2 class="sec">考试</h2>
+    <div class="card form">
+      <label>考试日期<input type="date" id="set-exam"></label>
+      <label>目标院校<input type="text" id="set-target" placeholder="如：新疆财经大学"></label>
+      <label>目标总分<input type="number" id="set-score" min="0" max="300"></label>
+      <label>每日目标（张）<input type="number" id="set-goal" min="5" max="300"></label>
+    </div>
+
+    <h2 class="sec">AI</h2>
+    <div class="card form">
+      <label>接口地址<input type="text" id="set-api-base" placeholder="https://api.deepseek.com/v1"></label>
+      <label>模型<input type="text" id="set-model" placeholder="deepseek-chat"></label>
+      <label>API Key<input type="password" id="set-apikey" placeholder="sk-..."></label>
+      <p class="tip">Key 只保存在本机浏览器存储里，不会上传到除你填的接口外的任何地方。留空则使用离线规则提示。</p>
+      <button class="ghost" id="btn-test-ai">测试连接</button>
+      <p class="tip" id="ai-test-result"></p>
+    </div>
+
+    <h2 class="sec">数据</h2>
+    <div class="card form">
+      <button class="ghost" id="btn-export">导出备份</button>
+      <button class="ghost" id="btn-import">导入备份</button>
+      <button class="ghost danger" id="btn-reset">清空全部数据</button>
+    </div>
+    <p class="tip">建议每学期导出一次，存到「文件」App 或微信收藏。</p>
+    <p class="tip" id="app-version"></p>
+  </section>
+
+  <!-- ========== 底部导航 ========== -->
+  <nav id="tabbar">
+    <button class="tab active" data-go="home"><i>◉</i>首页</button>
+    <button class="tab" data-go="cards"><i>▣</i>背诵</button>
+    <button class="tab" data-go="wrongs"><i>✗</i>错题</button>
+    <button class="tab" data-go="plan"><i>✓</i>计划</button>
+    <button class="tab" data-go="settings"><i>⚙</i>设置</button>
+  </nav>
+</div>
+
+<!-- ========== 弹层 ========== -->
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-inner">
+    <div class="sheet-hd"><b id="sheet-title">标题</b><button id="sheet-close">关闭</button></div>
+    <div id="sheet-body"></div>
+  </div>
+</div>
+
+<div id="toast" hidden></div>
+
+<script src="data/seed.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

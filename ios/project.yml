@@ -1,0 +1,44 @@
+name: ShengBen
+options:
+  bundleIdPrefix: com.shengben
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  ShengBen:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../web
+        type: folder
+        name: web
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: 升本
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIRequiredDeviceCapabilities: [arm64]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        ITSAppUsesNonExemptEncryption: false
+        LSRequiresIPhoneOS: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.shengben.zkb
+        TARGETED_DEVICE_FAMILY: "1,2"
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    scheme:
+      testTargets: []

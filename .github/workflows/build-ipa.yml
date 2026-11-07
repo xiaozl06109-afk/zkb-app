@@ -1,0 +1,68 @@
+name: Build unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Show toolchain
+        run: xcodebuild -version && sw_vers
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate --spec project.yml
+
+      - name: Build (no code signing)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ShengBen.xcodeproj \
+            -scheme ShengBen \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build | tee build.log | tail -40
+
+      - name: Package IPA
+        working-directory: ios
+        run: |
+          APP="build/Build/Products/Release-iphoneos/ShengBen.app"
+          test -d "$APP" || { echo "构建产物不存在"; exit 1; }
+          rm -rf out && mkdir -p out/Payload
+          cp -R "$APP" out/Payload/
+          cd out && zip -qry ShengBen-unsigned.ipa Payload && ls -lh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ShengBen-unsigned-ipa
+          path: ios/out/ShengBen-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish release with IPA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: ios
+        run: |
+          TAG="build-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" out/ShengBen-unsigned.ipa \
+            --title "升本 App $TAG" \
+            --notes "自动构建的未签名 IPA（arm64，iOS 15+）。请使用自己的证书签名后安装。" \
+            --latest
