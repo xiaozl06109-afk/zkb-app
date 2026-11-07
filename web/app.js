@@ -838,7 +838,7 @@
     $("#remind-state").textContent = rm.on
       ? "已开启：每天 " + (rm.time || "20:00") + " 提醒（首次会弹系统授权，允许即可）"
       : "未开启。开启后每天到点提醒你背卡（需安装 App，网页版不支持系统通知）。";
-    $("#app-version").textContent = "版本 1.4 · 卡片 " + S.cards.length + " 张 · 错题 " +
+    $("#app-version").textContent = "版本 1.5 · 卡片 " + S.cards.length + " 张 · 错题 " +
       S.wrongs.length + " 道 · 模考 " + (S.exams || []).length + " 次 · 批改 " + (S.essays || []).length + " 份";
   }
 
@@ -871,6 +871,22 @@
       toast("已记录设置；系统通知需安装 App 版才生效");
     }
     renderSettings();
+  };
+
+  $("#btn-remind-test").onclick = () => {
+    const br = (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.notify) || null;
+    if (!br) return toast("网页版不支持系统通知，请用 App 版测试");
+    br.postMessage({ action: "test" });
+    $("#remind-state").textContent = "已请求授权，5 秒后应弹出通知。没弹的话去 设置→通知→升本 检查是否被关掉。";
+    toast("5 秒后弹测试通知");
+  };
+
+  window.__notifyAuth = (granted) => {
+    const el = $("#remind-state");
+    if (!el) return;
+    el.textContent = granted
+      ? "系统通知权限：已允许 ✅"
+      : "系统通知权限：被拒绝 ❌ 请到 设置 → 通知 → 升本 手动打开";
   };
 
   $("#btn-remind-off").onclick = () => {

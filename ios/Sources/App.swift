@@ -29,12 +29,50 @@ final class StoreBridge: NSObject, WKScriptMessageHandler {
 /// 每日提醒：网页里没有 Notification API，这里用原生 UNUserNotificationCenter 排程
 final class NotifyBridge: NSObject, WKScriptMessageHandler {
     private let identifier = "zkb.daily"
+    weak var webView: WKWebView?
+
+    private func report(_ granted: Bool) {
+        let js = "window.__notifyAuth && window.__notifyAuth(\(granted ? "true" : "false"))"
+        DispatchQueue.main.async { [weak self] in
+            self?.webView?.evaluateJavaScript(js, completionHandler: nil)
+        }
+    }
+
+    private func scheduleTest() {
+        let center = UNUserNotificationCenter.current()
+        center.getNotificationSettings { settings in
+            if settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional {
+                self.fireTest(center)
+                self.report(true)
+                return
+            }
+            center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+                self.report(granted)
+                if granted { self.fireTest(center) }
+            }
+        }
+    }
+
+    private func fireTest(_ center: UNUserNotificationCenter) {
+        let content = UNMutableNotificationContent()
+        content.title = "通知是通的 ✅"
+        content.body = "收到这条，说明每日提醒也会正常响。"
+        content.sound = .default
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 5, repeats: false)
+        let req = UNNotificationRequest(identifier: "zkb.test", content: content, trigger: trigger)
+        center.add(req, withCompletionHandler: nil)
+    }
 
     func userContentController(_ userContentController: WKUserContentController,
                               didReceive message: WKScriptMessage) {
         guard message.name == "notify", let body = message.body as? [String: Any] else { return }
         let center = UNUserNotificationCenter.current()
         let action = body["action"] as? String ?? "schedule"
+
+        if action == "test" {
+            scheduleTest()
+            return
+        }
 
         if action == "cancel" {
             center.removePendingNotificationRequests(withIdentifiers: [identifier])
@@ -49,6 +87,7 @@ final class NotifyBridge: NSObject, WKScriptMessageHandler {
         let text = body["body"] as? String ?? "10 分钟就能背完今天的量"
 
         center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            self.report(granted)
             guard granted else { return }
             let content = UNMutableNotificationContent()
             content.title = title
@@ -100,6 +139,7 @@ final class RootViewController: UIViewController, WKUIDelegate, WKNavigationDele
         config.userContentController = ucc
 
         webView = WKWebView(frame: view.bounds, configuration: config)
+        notify.webView = webView
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.navigationDelegate = self
         webView.uiDelegate = self
