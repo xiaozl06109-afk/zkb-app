@@ -53,6 +53,10 @@ h2.sec + .card{margin-top:0}
 .li.done .dot{background:var(--acc2);border-color:var(--acc2);color:#04170c}
 .li.done .txt{color:var(--dim);text-decoration:line-through}
 
+.quote{padding:14px 16px;background:linear-gradient(135deg,rgba(59,130,246,.10),transparent)}
+.q-text{margin:0;font-size:15px;line-height:1.7;color:var(--txt)}
+.q-src{margin:6px 0 0;font-size:12px;color:var(--dim);text-align:right}
+
 /* chips */
 .chips{display:flex;gap:8px;overflow-x:auto;padding:0 0 12px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}

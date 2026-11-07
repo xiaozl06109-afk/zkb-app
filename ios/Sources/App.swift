@@ -1,5 +1,6 @@
 import UIKit
 import WebKit
+import UserNotifications
 
 // 极简 WKWebView 外壳：把打包进 App 的 web/ 目录跑起来，
 // 并把状态存进 UserDefaults（file:// 下 localStorage 不可靠，所以走原生桥）。
@@ -25,9 +26,50 @@ final class StoreBridge: NSObject, WKScriptMessageHandler {
     }
 }
 
+/// 每日提醒：网页里没有 Notification API，这里用原生 UNUserNotificationCenter 排程
+final class NotifyBridge: NSObject, WKScriptMessageHandler {
+    private let identifier = "zkb.daily"
+
+    func userContentController(_ userContentController: WKUserContentController,
+                              didReceive message: WKScriptMessage) {
+        guard message.name == "notify", let body = message.body as? [String: Any] else { return }
+        let center = UNUserNotificationCenter.current()
+        let action = body["action"] as? String ?? "schedule"
+
+        if action == "cancel" {
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            return
+        }
+
+        let time = body["time"] as? String ?? "20:00"
+        let parts = time.split(separator: ":").compactMap { Int($0) }
+        let hour = parts.count > 0 ? parts[0] : 20
+        let minute = parts.count > 1 ? parts[1] : 0
+        let title = body["title"] as? String ?? "今天的卡还没刷"
+        let text = body["body"] as? String ?? "10 分钟就能背完今天的量"
+
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = text
+            content.sound = .default
+            var comps = DateComponents()
+            comps.hour = hour
+            comps.minute = minute
+            let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: true)
+            let request = UNNotificationRequest(identifier: self.identifier,
+                                                content: content, trigger: trigger)
+            center.removePendingNotificationRequests(withIdentifiers: [self.identifier])
+            center.add(request)
+        }
+    }
+}
+
 final class RootViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
     private var webView: WKWebView!
     private let bridge = StoreBridge()
+    private let notify = NotifyBridge()
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
         traitCollection.userInterfaceStyle == .dark ? .lightContent : .darkContent
@@ -46,6 +88,7 @@ final class RootViewController: UIViewController, WKUIDelegate, WKNavigationDele
         config.mediaTypesRequiringUserActionForPlayback = []
         let ucc = WKUserContentController()
         ucc.add(bridge, name: "store")
+        ucc.add(notify, name: "notify")
 
         // 启动时把上次的存档注入，再交给页面初始化
         let saved = UserDefaults.standard.string(forKey: stateKey) ?? ""
@@ -107,11 +150,19 @@ final class RootViewController: UIViewController, WKUIDelegate, WKNavigationDele
 }
 
 @main
-final class AppDelegate: UIResponder, UIApplicationDelegate {
+final class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     var window: UIWindow?
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler:
+                                @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
         let win = UIWindow(frame: UIScreen.main.bounds)
         win.rootViewController = RootViewController()
         win.makeKeyAndVisible()

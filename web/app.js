@@ -121,6 +121,58 @@
     if (el) { go(el.dataset.go); }
   });
 
+  /* ---------------- 每日一句 ---------------- */
+  const QUOTES = [
+    ["不积跬步，无以至千里。", "《荀子·劝学》"],
+    ["锲而不舍，金石可镂。", "《荀子·劝学》"],
+    ["业精于勤，荒于嬉；行成于思，毁于随。", "韩愈《进学解》"],
+    ["学而不思则罔，思而不学则殆。", "《论语》"],
+    ["博观而约取，厚积而薄发。", "苏轼《稼说送张琥》"],
+    ["千里之行，始于足下。", "《老子》"],
+    ["纸上得来终觉浅，绝知此事要躬行。", "陆游《冬夜读书示子聿》"],
+    ["宝剑锋从磨砺出，梅花香自苦寒来。", "《警世贤文》"],
+    ["天行健，君子以自强不息。", "《周易》"],
+    ["有志者，事竟成。", "《后汉书》"],
+    ["少年易老学难成，一寸光阴不可轻。", "朱熹《偶成》"],
+    ["黑发不知勤学早，白首方悔读书迟。", "颜真卿《劝学》"],
+    ["读书破万卷，下笔如有神。", "杜甫《奉赠韦左丞丈》"],
+    ["知之者不如好之者，好之者不如乐之者。", "《论语》"],
+    ["苟日新，日日新，又日新。", "《礼记·大学》"],
+    ["他山之石，可以攻玉。", "《诗经·小雅》"],
+    ["路漫漫其修远兮，吾将上下而求索。", "屈原《离骚》"],
+    ["博学之，审问之，慎思之，明辨之，笃行之。", "《礼记·中庸》"],
+    ["绳锯木断，水滴石穿。", "《鹤林玉露》"],
+    ["非学无以广才，非志无以成学。", "诸葛亮《诫子书》"],
+    ["立身以立学为先，立学以读书为本。", "欧阳修"],
+    ["为中华之崛起而读书。", "周恩来"],
+    ["空谈误国，实干兴邦。", "时政"],
+    ["幸福都是奋斗出来的。", "时政"],
+    ["青年兴则国家兴，青年强则国家强。", "时政"],
+    ["把论文写在祖国大地上。", "时政"],
+    ["绿水青山就是金山银山。", "时政"],
+    ["江山就是人民，人民就是江山。", "时政"],
+    ["发展是解决我国一切问题的基础和关键。", "时政"],
+    ["人才是第一资源，创新是第一动力。", "时政"],
+    ["以人民为中心的发展思想。", "时政"],
+    ["守正创新，笃行致远。", "时政"],
+    ["文化自信是更基础、更广泛、更深厚的自信。", "时政"],
+    ["中华民族伟大复兴，绝不是轻轻松松、敲锣打鼓就能实现的。", "时政"],
+    ["每一代青年都有自己的际遇和机缘。", "时政"],
+    ["越是艰难越向前。", "时政"],
+    ["功成不必在我，功成必定有我。", "时政"],
+    ["征途漫漫，惟有奋斗。", "时政"],
+    ["想，都是问题；做，才是答案。", "备考"],
+    ["今天背不下来的书，明天会以分数的形式还给你。", "备考"]
+  ];
+
+  function renderQuote() {
+    const d = new Date();
+    const day = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / DAY);
+    const q = QUOTES[day % QUOTES.length];
+    $("#quote-text").textContent = q[0];
+    $("#quote-src").textContent = "— " + q[1];
+  }
+
   /* ---------------- 倒计时 / 首页 ---------------- */
   function examInfo() {
     const exam = parseDate(S.settings.exam);
@@ -198,6 +250,7 @@
         esc(m.d + "  " + m.t) + '<br><small style="color:var(--dim)">' + st + "</small></span></div>";
     }).join("");
 
+    renderQuote();
     computeStreak();
     $("#streak-num").textContent = S.stats.streak || 0;
   }
@@ -420,6 +473,7 @@
           else if (x === b) x.classList.add("wrong");
         });
         w.streak = ok ? (w.streak || 0) + 1 : 0;
+        w.lastAt = Date.now();
         if (ok) right++;
         save();
         $("#drill-fb").innerHTML = '<p class="tip">' + (ok ? "答对了" : "答错了") +
@@ -500,6 +554,7 @@
 
   /* ---------------- 错题 ---------------- */
   let wrongFilter = "全部";
+  let wrongSort = "new";
 
   function renderWrongs() {
     const un = S.wrongs.filter((w) => w.streak < 3).length;
@@ -511,6 +566,15 @@
     let list = S.wrongs.slice().reverse();
     if (wrongFilter === "语文" || wrongFilter === "政治") list = list.filter((w) => w.subject === wrongFilter);
     if (wrongFilter === "已掌握") list = list.filter((w) => w.streak >= 3);
+
+    const sorts = [["new", "最新加入"], ["stale", "最久未练"], ["weak", "掌握最差"]];
+    $("#wrong-sort").innerHTML = sorts.map((x) =>
+      '<button class="chip' + (x[0] === wrongSort ? " on" : "") + '" data-sort="' + x[0] + '">' + x[1] + "</button>").join("");
+    $$("#wrong-sort .chip").forEach((b) => b.onclick = () => { wrongSort = b.dataset.sort; renderWrongs(); });
+
+    if (wrongSort === "stale") list.sort((a, b) => (a.lastAt || a.createdAt || 0) - (b.lastAt || b.createdAt || 0));
+    else if (wrongSort === "weak") list.sort((a, b) => (a.streak || 0) - (b.streak || 0));
+    else list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
     $("#wrong-list").innerHTML = list.length ? list.map((w) => {
       const ans = (w.answer || "").trim();
@@ -540,7 +604,7 @@
     $$("[data-ok]").forEach((b) => b.onclick = () => {
       const w = S.wrongs.find((x) => x.id === b.dataset.ok);
       if (!w) return;
-      w.streak = (w.streak || 0) + 1; save(); renderWrongs();
+      w.streak = (w.streak || 0) + 1; w.lastAt = Date.now(); save(); renderWrongs();
       toast(w.streak >= 3 ? "已掌握 ✓" : "再答对 " + (3 - w.streak) + " 次就算掌握");
     });
     $$("[data-rm]").forEach((b) => b.onclick = () => {
@@ -769,7 +833,12 @@
     $("#set-api-base").value = st.apiBase;
     $("#set-model").value = st.model;
     $("#set-apikey").value = st.apiKey;
-    $("#app-version").textContent = "版本 1.3 · 卡片 " + S.cards.length + " 张 · 错题 " +
+    const rm = S.settings.remind || {};
+    $("#set-remind").value = rm.time || "20:00";
+    $("#remind-state").textContent = rm.on
+      ? "已开启：每天 " + (rm.time || "20:00") + " 提醒（首次会弹系统授权，允许即可）"
+      : "未开启。开启后每天到点提醒你背卡（需安装 App，网页版不支持系统通知）。";
+    $("#app-version").textContent = "版本 1.4 · 卡片 " + S.cards.length + " 张 · 错题 " +
       S.wrongs.length + " 道 · 模考 " + (S.exams || []).length + " 次 · 批改 " + (S.essays || []).length + " 份";
   }
 
@@ -788,6 +857,30 @@
       if (id === "set-exam" || id === "set-goal") renderHome();
     });
   });
+
+  $("#btn-remind-on").onclick = () => {
+    const time = $("#set-remind").value || "20:00";
+    S.settings.remind = { on: true, time };
+    save();
+    const br = (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.notify) || null;
+    if (br) {
+      br.postMessage({ action: "schedule", time,
+        title: "今天的卡还没刷", body: "10 分钟就能背完今天的量，别断在第一天。" });
+      toast("已开启，每天 " + time + " 提醒");
+    } else {
+      toast("已记录设置；系统通知需安装 App 版才生效");
+    }
+    renderSettings();
+  };
+
+  $("#btn-remind-off").onclick = () => {
+    S.settings.remind = { on: false, time: ($("#set-remind").value || "20:00") };
+    save();
+    const br = (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.notify) || null;
+    if (br) br.postMessage({ action: "cancel" });
+    toast("已关闭提醒");
+    renderSettings();
+  };
 
   $("#btn-export").onclick = () => {
     const data = JSON.stringify(S);
