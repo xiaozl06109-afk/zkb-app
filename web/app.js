@@ -305,6 +305,8 @@
       });
       if (!ok) { $("#flash-back").hidden = false; }
       gradeCard(card, ok ? 2 : 0);
+      bumpQuiz(card.tag || card.deck, ok);
+      if (!ok) addWrongFromCard(card, opts, idx);
       const tk = todayKey();
       $("#cards-sub").textContent = "待复习 " + deckStats()["全部"] + " 张 · 今日已完成 " + (S.stats.days[tk] || 0) + " 张";
       $("#btn-next").hidden = false;
@@ -315,6 +317,120 @@
   $("#btn-next").onclick = () => { buildQueue(); renderCards(); };
 
   $("#btn-mode").onclick = () => { quizMode = !quizMode; renderCards(); };
+
+  /* ---------------- 章节正确率 ---------------- */
+  function bumpQuiz(key, ok) {
+    S.stats.quiz = S.stats.quiz || {};
+    const row = S.stats.quiz[key] = S.stats.quiz[key] || { right: 0, wrong: 0 };
+    if (ok) row.right++; else row.wrong++;
+    save();
+  }
+
+  function openStatsSheet() {
+    const q = S.stats.quiz || {};
+    const keys = Object.keys(q).filter((k) => q[k].right + q[k].wrong > 0);
+    if (!keys.length) { sheet("章节正确率", '<p class="tip">还没有答题记录。去背诵页做几道选择题，这里就会出现各章节正确率。</p>'); return; }
+    let tr = 0, tw = 0;
+    keys.forEach((k) => { tr += q[k].right; tw += q[k].wrong; });
+    const rows = keys.map((k) => {
+      const r = q[k].right, w = q[k].wrong, n = r + w;
+      return { k, n, pct: Math.round((r / n) * 100) };
+    }).sort((a, b) => a.pct - b.pct);
+    const html = '<p class="tip">累计 ' + (tr + tw) + ' 题，总正确率 ' + Math.round((tr / (tr + tw)) * 100) +
+      '%。按薄弱程度从低到高排，最上面就是最该补的章节。</p>' +
+      rows.map((r) => '<div class="statrow"><span class="nm">' + esc(r.k) + '</span>' +
+        '<span class="track"><i style="width:' + r.pct + '%;background:' +
+        (r.pct < 60 ? "var(--bad)" : r.pct < 80 ? "var(--warn)" : "var(--acc2)") + '"></i></span>' +
+        '<span class="val">' + r.pct + '% · ' + r.n + '题</span></div>').join("") +
+      '<p class="tip">低于 60% 的章节建议切到「翻卡自评」逐条背一遍，再回来做选择题。</p>';
+    sheet("章节正确率", html);
+  }
+  $("#btn-stats").onclick = openStatsSheet;
+
+  /* 答错自动进错题本 */
+  function addWrongFromCard(card, opts, chosenIdx) {
+    const letters = ["A", "B", "C", "D"];
+    const topic = card.tag || "未分类";
+    // 同一张卡不重复入库
+    if (S.wrongs.some((w) => w.fromCard === card.id || (w.stem === card.front && w.topic === topic))) return;
+    const rightIdx = opts.indexOf(card.back);
+    S.wrongs.push({
+      id: "w" + Date.now(),
+      subject: card.deck, topic,
+      stem: card.front,
+      options: opts.map((o, i) => letters[i] + ". " + o),
+      answer: letters[rightIdx] || "",
+      myAnswer: letters[chosenIdx] || "",
+      explanation: "正确答案：" + card.back,
+      streak: 0, createdAt: Date.now(), fromCard: card.id
+    });
+    save();
+    toast("已自动加入错题本");
+  }
+
+  /* ---------------- 错题按章重练 ---------------- */
+  function openDrillSheet() {
+    const pend = S.wrongs.filter((w) => w.streak < 3 && w.options && w.options.length);
+    if (!pend.length) {
+      sheet("按章重练", '<p class="tip">暂无可用错题。自动收录的错题自带选项；手动录题时把选项填上也能参与重练。</p>');
+      return;
+    }
+    const map = {};
+    pend.forEach((w) => { const t = w.topic || "未分类"; map[t] = (map[t] || 0) + 1; });
+    sheet("按章重练", '<div class="form"><p class="tip">答对 3 次算掌握，答错清零重来。</p>' +
+      '<button class="primary" data-drill="__all">全部（' + pend.length + ' 题）</button>' +
+      Object.keys(map).map((t) =>
+        '<button class="ghost" data-drill="' + esc(t) + '">' + esc(t) + '（' + map[t] + ' 题）</button>').join("") +
+      "</div>");
+    $$("[data-drill]").forEach((b) => b.onclick = () => startDrill(b.dataset.drill));
+  }
+
+  function startDrill(tag) {
+    const list = S.wrongs.filter((w) => w.streak < 3 && w.options && w.options.length &&
+      (tag === "__all" || (w.topic || "未分类") === tag));
+    if (!list.length) return toast("没有题目");
+    let i = 0, right = 0;
+    const letters = ["A", "B", "C", "D"];
+    const step = () => {
+      if (i >= list.length) {
+        sheet("重练完成", '<div class="form" style="text-align:center">' +
+          '<p class="tip">本轮 ' + list.length + ' 题，答对 ' + right + ' 题</p>' +
+          '<button class="primary" id="drill-close">关闭</button></div>');
+        $("#drill-close").onclick = () => { closeSheet(); renderWrongs(); };
+        return;
+      }
+      const w = list[i];
+      const opts = w.options.map((o, idx) => {
+        const t = String(o).trim();
+        const letter = /^[A-D]/.test(t) ? t.charAt(0) : letters[idx];
+        const text = t.replace(/^[A-D][.、．]\s*/, "");
+        return { letter, text };
+      });
+      const ans = String(w.answer || "").trim().toUpperCase();
+      sheet("重练 " + (i + 1) + "/" + list.length + " · " + (w.topic || "未分类"),
+        '<div class="form"><div class="wstem">' + esc(w.stem) + '</div>' +
+        '<div id="drill-opts"></div><div id="drill-fb"></div></div>');
+      $("#drill-opts").innerHTML = opts.map((o) =>
+        '<button class="opt" data-l="' + o.letter + '"><b>' + o.letter + "</b>" + esc(o.text) + "</button>").join("");
+      $$("#drill-opts .opt").forEach((b) => b.onclick = () => {
+        const ok = b.dataset.l === ans;
+        $$("#drill-opts .opt").forEach((x) => {
+          x.disabled = true;
+          if (x.dataset.l === ans) x.classList.add("right");
+          else if (x === b) x.classList.add("wrong");
+        });
+        w.streak = ok ? (w.streak || 0) + 1 : 0;
+        if (ok) right++;
+        save();
+        $("#drill-fb").innerHTML = '<p class="tip">' + (ok ? "答对了" : "答错了") +
+          " · 这道题已对 " + w.streak + "/3 次" + (w.streak >= 3 ? "（已掌握）" : "") + "</p>" +
+          '<button class="primary wide" id="drill-next">' + (i + 1 >= list.length ? "查看结果" : "下一题") + "</button>";
+        $("#drill-next").onclick = () => { i++; step(); };
+      });
+    };
+    step();
+  }
+  $("#btn-drill").onclick = openDrillSheet;
 
   $("#btn-reveal").onclick = () => {
     if (!current) return;
@@ -653,7 +769,7 @@
     $("#set-api-base").value = st.apiBase;
     $("#set-model").value = st.model;
     $("#set-apikey").value = st.apiKey;
-    $("#app-version").textContent = "版本 1.2 · 卡片 " + S.cards.length + " 张 · 错题 " +
+    $("#app-version").textContent = "版本 1.3 · 卡片 " + S.cards.length + " 张 · 错题 " +
       S.wrongs.length + " 道 · 模考 " + (S.exams || []).length + " 次 · 批改 " + (S.essays || []).length + " 份";
   }
 

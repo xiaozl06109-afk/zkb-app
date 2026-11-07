@@ -82,9 +82,10 @@
       <button class="primary wide" id="btn-next" hidden style="margin-top:14px">下一题</button>
     </div>
 
-    <div class="row-btns">
-      <button class="ghost" id="btn-add-card">＋ 新建卡片</button>
+    <div class="row-btns cols3">
+      <button class="ghost" id="btn-add-card">＋ 新建</button>
       <button class="ghost" id="btn-card-list">卡片列表</button>
+      <button class="ghost" id="btn-stats">正确率</button>
     </div>
     <button class="ghost wide" id="btn-mode" style="margin-top:10px">切换为卡片模式</button>
     <p class="tip" id="cards-empty" hidden>这个卡组今天没有待复习的卡片了。可以切换卡组，或让 AI 帮你造新卡。</p>
@@ -94,7 +95,10 @@
   <section class="page" id="page-wrongs">
     <header class="hd">
       <div><h1>错题本</h1><p class="sub" id="wrongs-sub">—</p></div>
-      <button class="ghost" id="btn-add-wrong">＋ 录题</button>
+      <div style="display:flex;gap:8px">
+        <button class="ghost" id="btn-drill">按章重练</button>
+        <button class="ghost" id="btn-add-wrong">＋ 录题</button>
+      </div>
     </header>
     <div class="chips" id="wrong-chips"></div>
     <div id="wrong-list"></div>
